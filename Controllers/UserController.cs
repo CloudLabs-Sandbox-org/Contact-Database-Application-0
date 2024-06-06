@@ -11,6 +11,8 @@ namespace CRUD_application_2.Controllers
         public ActionResult Index()
         {
             // Implement the Index method here
+            // get a list of users from User using C
+            return View(userlist);
         }
  
         // GET: User/Details/5

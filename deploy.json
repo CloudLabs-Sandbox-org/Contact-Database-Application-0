@@ -1,0 +1,273 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "subscriptionId": {
+            "type": "String"
+        },
+        "resourceGroupName": {
+            "type": "String"
+        },
+        "name": {
+            "type": "String"
+        },
+        "location": {
+            "type": "String"
+        },
+        "hostingPlanName": {
+            "type": "String"
+        },
+        "serverFarmResourceGroup": {
+            "type": "String"
+        },
+        "alwaysOn": {
+            "type": "Bool"
+        },
+        "ftpsState": {
+            "type": "String"
+        },
+        "sku": {
+            "type": "String"
+        },
+        "skuCode": {
+            "type": "String"
+        },
+        "workerSize": {
+            "type": "String"
+        },
+        "workerSizeId": {
+            "type": "String"
+        },
+        "numberOfWorkers": {
+            "type": "String"
+        },
+        "currentStack": {
+            "type": "String"
+        },
+        "phpVersion": {
+            "type": "String"
+        },
+        "netFrameworkVersion": {
+            "type": "String"
+        },
+        "repoUrl": {
+            "type": "String"
+        },
+        "branch": {
+            "type": "String"
+        },
+        "oidcUserIdentityName": {
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Web/sites",
+            "apiVersion": "2022-03-01",
+            "name": "[parameters('name')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "microsoft.insights/components/linhapp",
+                "[concat('Microsoft.Web/serverfarms/', parameters('hostingPlanName'))]"
+            ],
+            "tags": {},
+            "properties": {
+                "name": "[parameters('name')]",
+                "siteConfig": {
+                    "appSettings": [
+                        {
+                            "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                            "value": "[reference('microsoft.insights/components/linhapp', '2015-05-01').ConnectionString]"
+                        },
+                        {
+                            "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+                            "value": "~2"
+                        },
+                        {
+                            "name": "XDT_MicrosoftApplicationInsights_Mode",
+                            "value": "default"
+                        }
+                    ],
+                    "metadata": [
+                        {
+                            "name": "CURRENT_STACK",
+                            "value": "[parameters('currentStack')]"
+                        }
+                    ],
+                    "phpVersion": "[parameters('phpVersion')]",
+                    "netFrameworkVersion": "[parameters('netFrameworkVersion')]",
+                    "alwaysOn": "[parameters('alwaysOn')]",
+                    "ftpsState": "[parameters('ftpsState')]"
+                },
+                "serverFarmId": "[concat('/subscriptions/', parameters('subscriptionId'),'/resourcegroups/', parameters('serverFarmResourceGroup'), '/providers/Microsoft.Web/serverfarms/', parameters('hostingPlanName'))]",
+                "clientAffinityEnabled": true,
+                "virtualNetworkSubnetId": null,
+                "httpsOnly": true,
+                "publicNetworkAccess": "Enabled"
+            },
+            "resources": [
+                {
+                    "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+                    "apiVersion": "2022-09-01",
+                    "name": "[concat(parameters('name'), '/scm')]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/Sites', parameters('name'))]"
+                    ],
+                    "properties": {
+                        "allow": false
+                    }
+                },
+                {
+                    "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+                    "apiVersion": "2022-09-01",
+                    "name": "[concat(parameters('name'), '/ftp')]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/Sites', parameters('name'))]"
+                    ],
+                    "properties": {
+                        "allow": false
+                    }
+                },
+                {
+                    "type": "sourcecontrols",
+                    "apiVersion": "2020-12-01",
+                    "name": "web",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/Sites', parameters('name'))]",
+                        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('oidcUserIdentityName'))]"
+                    ],
+                    "properties": {
+                        "RepoUrl": "[parameters('repoUrl')]",
+                        "branch": "[parameters('branch')]",
+                        "IsManualIntegration": false,
+                        "deploymentRollbackEnabled": false,
+                        "isMercurial": false,
+                        "isGitHubAction": true,
+                        "gitHubActionConfiguration": {
+                            "generateWorkflowFile": true,
+                            "workflowSettings": {
+                                "appType": "webapp",
+                                "authType": "oidc",
+                                "publishType": "code",
+                                "os": "windows",
+                                "runtimeStack": "dotnet",
+                                "workflowApiVersion": "2022-10-01",
+                                "slotName": "production",
+                                "variables": {
+                                    "runtimeVersion": "8.x",
+                                    "clientId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('oidcUserIdentityName')), '2018-11-30').clientId]",
+                                    "tenantId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('oidcUserIdentityName')), '2018-11-30').tenantId]"
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+            "apiVersion": "2018-11-30",
+            "name": "[parameters('oidcUserIdentityName')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/Sites', parameters('name'))]"
+            ],
+            "properties": {},
+            "resources": [
+                {
+                    "type": "federatedIdentityCredentials",
+                    "apiVersion": "2022-01-31-preview",
+                    "name": "[uniqueString(resourceGroup().id)]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('oidcUserIdentityName'))]"
+                    ],
+                    "properties": {
+                        "audiences": [
+                            "api://AzureADTokenExchange"
+                        ],
+                        "issuer": "https://token.actions.githubusercontent.com",
+                        "subject": "repo:github-cloudlabsuser-2053/Contact-Database-Application:environment:production"
+                    }
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Authorization/roleAssignments",
+            "apiVersion": "2022-04-01",
+            "name": "[guid(resourceGroup().id, deployment().name)]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/Sites', parameters('name'))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('oidcUserIdentityName'))]"
+            ],
+            "properties": {
+                "roleDefinitionId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/de139f84-1756-47ae-9be6-808fbbe84772')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('oidcUserIdentityName')), '2018-11-30').principalId]",
+                "principalType": "ServicePrincipal"
+            },
+            "scope": "[concat('Microsoft.web/sites/', parameters('name'))]"
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2018-11-01",
+            "name": "[parameters('hostingPlanName')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [],
+            "tags": {},
+            "sku": {
+                "Tier": "[parameters('sku')]",
+                "Name": "[parameters('skuCode')]"
+            },
+            "kind": "",
+            "properties": {
+                "name": "[parameters('hostingPlanName')]",
+                "workerSize": "[parameters('workerSize')]",
+                "workerSizeId": "[parameters('workerSizeId')]",
+                "numberOfWorkers": "[parameters('numberOfWorkers')]",
+                "zoneRedundant": false
+            }
+        },
+        {
+            "type": "microsoft.insights/components",
+            "apiVersion": "2020-02-02-preview",
+            "name": "linhapp",
+            "location": "germanywestcentral",
+            "dependsOn": [
+                "newWorkspaceTemplate"
+            ],
+            "tags": {},
+            "properties": {
+                "ApplicationId": "[parameters('name')]",
+                "Request_Source": "IbizaWebAppExtensionCreate",
+                "Flow_Type": "Redfield",
+                "Application_Type": "web",
+                "WorkspaceResourceId": "/subscriptions/0981be26-6f6d-4ef7-837c-bfab1ae0e5d9/resourceGroups/DefaultResourceGroup-DEWC/providers/Microsoft.OperationalInsights/workspaces/DefaultWorkspace-0981be26-6f6d-4ef7-837c-bfab1ae0e5d9-DEWC"
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2021-04-01",
+            "name": "newWorkspaceTemplate",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {},
+                    "variables": {},
+                    "resources": [
+                        {
+                            "apiVersion": "2020-08-01",
+                            "name": "DefaultWorkspace-0981be26-6f6d-4ef7-837c-bfab1ae0e5d9-DEWC",
+                            "type": "Microsoft.OperationalInsights/workspaces",
+                            "location": "germanywestcentral",
+                            "properties": {}
+                        }
+                    ]
+                }
+            },
+            "subscriptionId": "[parameters('subscriptionId')]",
+            "resourceGroup": "DefaultResourceGroup-DEWC"
+        }
+    ]
+}
